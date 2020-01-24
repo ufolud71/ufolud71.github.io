@@ -1,166 +1,202 @@
 /*
- * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ * Copyright 2013 the original author or authors.
  *
- * This code is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License version
- * 2 along with this work; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
- *
- * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
- * or visit www.oracle.com if you need additional information or have any
- * questions.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-var moduleSearchIndex;
-var packageSearchIndex;
-var typeSearchIndex;
-var memberSearchIndex;
-var tagSearchIndex;
-function loadScripts(doc, tag) {
-  createElem(doc, tag, 'jquery/jszip/dist/jszip.js');
-  createElem(doc, tag, 'jquery/jszip-utils/dist/jszip-utils.js');
-  if (window.navigator.userAgent.indexOf('MSIE ') > 0 || window.navigator.userAgent.indexOf('Trident/') > 0 ||
-    window.navigator.userAgent.indexOf('Edge/') > 0) {
-    createElem(doc, tag, 'jquery/jszip-utils/dist/jszip-utils-ie.js');
-  }
-  createElem(doc, tag, 'search.js');
-
-  $.get(pathtoroot + "module-search-index.zip")
-    .done(function() {
-      JSZipUtils.getBinaryContent(pathtoroot + "module-search-index.zip", function(e, data) {
-        JSZip.loadAsync(data).then(function(zip){
-          zip.file("module-search-index.json").async("text").then(function(content){
-            moduleSearchIndex = JSON.parse(content);
-          });
-        });
-      });
-    });
-  $.get(pathtoroot + "package-search-index.zip")
-    .done(function() {
-      JSZipUtils.getBinaryContent(pathtoroot + "package-search-index.zip", function(e, data) {
-        JSZip.loadAsync(data).then(function(zip){
-          zip.file("package-search-index.json").async("text").then(function(content){
-            packageSearchIndex = JSON.parse(content);
-          });
-        });
-      });
-    });
-  $.get(pathtoroot + "type-search-index.zip")
-    .done(function() {
-      JSZipUtils.getBinaryContent(pathtoroot + "type-search-index.zip", function(e, data) {
-        JSZip.loadAsync(data).then(function(zip){
-          zip.file("type-search-index.json").async("text").then(function(content){
-            typeSearchIndex = JSON.parse(content);
-          });
-        });
-      });
-    });
-  $.get(pathtoroot + "member-search-index.zip")
-    .done(function() {
-      JSZipUtils.getBinaryContent(pathtoroot + "member-search-index.zip", function(e, data) {
-        JSZip.loadAsync(data).then(function(zip){
-          zip.file("member-search-index.json").async("text").then(function(content){
-            memberSearchIndex = JSON.parse(content);
-          });
-        });
-      });
-    });
-  $.get(pathtoroot + "tag-search-index.zip")
-    .done(function() {
-      JSZipUtils.getBinaryContent(pathtoroot + "tag-search-index.zip", function(e, data) {
-        JSZip.loadAsync(data).then(function(zip){
-          zip.file("tag-search-index.json").async("text").then(function(content){
-            tagSearchIndex = JSON.parse(content);
-          });
-        });
-      });
-    });
-  if (!moduleSearchIndex) {
-    createElem(doc, tag, 'module-search-index.js');
-  }
-  if (!packageSearchIndex) {
-    createElem(doc, tag, 'package-search-index.js');
-  }
-  if (!typeSearchIndex) {
-    createElem(doc, tag, 'type-search-index.js');
-  }
-  if (!memberSearchIndex) {
-    createElem(doc, tag, 'member-search-index.js');
-  }
-  if (!tagSearchIndex) {
-    createElem(doc, tag, 'tag-search-index.js');
-  }
-  $(window).resize(function() {
-    $('.navPadding').css('padding-top', $('.fixedNav').css("height"));
-  });
+function populateFooter(report) {
+    $("#gradleVersion").text(report.gradleVersion);
+    $("#generationDate").text(report.generationDate);
 }
 
-function createElem(doc, tag, path) {
-  var script = doc.createElement(tag);
-  var scriptElement = doc.getElementsByTagName(tag)[0];
-  script.src = pathtoroot + path;
-  scriptElement.parentNode.insertBefore(script, scriptElement);
+function initializeProjectPage(report) {
+    $(document).ready(function() {
+        // event handling to close the insight div
+        $('#insight').on('click', '#dismissInsight', function(event) {
+            $('#insight').fadeOut();
+            event.preventDefault();
+        });
+
+        // creates a node of a dependency tree
+        function createDependencyNode(dependency) {
+            var node = {
+                data : dependency.name,
+                state : "open",
+                attr : {'data-module' : dependency.module},
+                children : []
+            };
+            var classes = [];
+            if (dependency.alreadyRendered) {
+                classes.push('alreadyRendered');
+            }
+            if (dependency.hasConflict) {
+                classes.push('hasConflict');
+            }
+            if (!dependency.resolvable) {
+                classes.push('unresolvable');
+            }
+            if (classes.length > 0) {
+                node.attr['class'] = classes.join(' ');
+            }
+            $.each(dependency.children, function(index, dependency) {
+                var dependencyNode = createDependencyNode(dependency);
+                node.children.push(dependencyNode);
+            });
+            return node;
+        }
+
+        // finds the moduleInsight by module among the given moduleInsights and returns its insight
+        function findInsight(moduleInsights, module) {
+            for (var i = 0; i < moduleInsights.length; i++) {
+                if (moduleInsights[i].module == module) {
+                    return moduleInsights[i].insight;
+                }
+            }
+            return null;
+        }
+
+        // creates a node of the insight tree
+        function createInsightNode(dependency) {
+            var node = {
+                data : dependency.name + (dependency.description ? ' (' + dependency.description + ')' : ''),
+                state : "open",
+                attr : {},
+                children : []
+            }
+            var classes = [];
+            if (dependency.alreadyRendered) {
+                classes.push('alreadyRendered');
+            }
+            if (!dependency.resolvable) {
+                classes.push('unresolvable');
+            }
+            if (dependency.hasConflict) {
+                classes.push('hasConflict');
+            }
+            if (dependency.isLeaf) {
+                classes.push('leaf');
+            }
+            if (classes.length > 0) {
+                node.attr['class'] = classes.join(' ');
+            }
+            $.each(dependency.children, function(index, dependency) {
+                var dependencyNode = createInsightNode(dependency);
+                node.children.push(dependencyNode);
+            });
+            return node;
+        }
+
+        // generates a tree for the given module by finding the insight among the given moduleInsights,
+        // and displays the insight div
+        function showModuleInsight(module, moduleInsights) {
+            var $insightDiv = $('#insight');
+            $insightDiv.html('');
+            $insightDiv.append($('<i> </i>').attr('id', 'dismissInsight').attr('title', 'Close'));
+            $insightDiv.append($('<h3>Insight for module </h3>').append(module));
+            var $tree = $('<div>').addClass('insightTree');
+            var insight = findInsight(moduleInsights, module);
+            var nodes = [];
+            $.each(insight, function(index, dependency) {
+                var dependencyNode = createInsightNode(dependency);
+                nodes.push(dependencyNode);
+            });
+            $tree.append($('<img>').attr('src', 'throbber.gif')).append('Loading...');
+            $tree.jstree({
+                json_data : {
+                    data : nodes
+                },
+                themes : {
+                    url : 'css/tree.css',
+                    icons : false
+                },
+                plugins : ['json_data', 'themes']
+            }).bind("loaded.jstree", function (event, data) {
+                        $('li.unresolvable a').attr('title', 'This dependency could not be resolved');
+                        $('li.alreadyRendered a').attr('title', 'The children of this dependency are not displayed because they have already been displayed before');
+                    });
+            $insightDiv.append($tree);
+            $tree.on('click', 'a', function(event) {
+                event.preventDefault();
+            });
+            $insightDiv.fadeIn();
+        }
+
+        // generates the configuration dependeny trees
+        var $dependencies = $('#dependencies');
+        var project = report.project;
+
+        $dependencies.append($('<h2/>').text('Project ' + project.name));
+        if (project.description) {
+            $dependencies.append($('<p>').addClass('projectDescription').text(project.name));
+        }
+
+        $.each(project.configurations, function(index, configuration) {
+            var $configurationDiv = $('<div/>').addClass('configuration');
+            var $configurationTitle = $('<h3/>').addClass('closed').append($('<ins/>')).append(configuration.name);
+            if (configuration.description) {
+                $configurationTitle.append(' - ').append($('<span/>').addClass('configurationDescription').text(configuration.description));
+            }
+            $configurationDiv.append($configurationTitle);
+
+            var $contentDiv = $('<div/>').addClass('configurationContent').hide();
+            var $tree = $('<div>').addClass('dependencyTree');
+            $contentDiv.append($tree);
+            if (configuration.dependencies && configuration.dependencies.length > 0) {
+                var nodes = [];
+                $.each(configuration.dependencies, function(index, dependency) {
+                    var dependencyNode = createDependencyNode(dependency);
+                    nodes.push(dependencyNode);
+                });
+                $tree.append($('<img>').attr('src', 'throbber.gif')).append('Loading...');
+                $tree.jstree({
+                    json_data : {
+                        data : nodes
+                    },
+                    themes : {
+                        url : 'css/tree.css',
+                        icons : false
+                    },
+                    plugins : ['json_data', 'themes']
+                }).bind("loaded.jstree", function (event, data) {
+                            $('li.unresolvable a').attr('title', 'This dependency could not be resolved');
+                            $('li.alreadyRendered a').attr('title', 'The children of this dependency are not displayed because they have already been displayed before');
+                        });
+            }
+            else {
+                $tree.append($('<p/>').text("No dependency"));
+            }
+
+            $tree.on('click', 'a', function(event) {
+                event.preventDefault();
+                var module = $(this).closest('li').attr('data-module');
+                showModuleInsight(module, configuration.moduleInsights);
+            });
+
+            $configurationDiv.append($contentDiv);
+            $dependencies.append($configurationDiv);
+        });
+
+        // allows the titles of each dependency tree to toggle the visibility of their tree
+        $dependencies.on('click', 'h3', function(event) {
+            $('div.configurationContent', $(this).parent()).slideToggle();
+            $(this).toggleClass('closed');
+        });
+
+        $('#projectBreadcrumb').text(project.name);
+        populateFooter(report);
+    });
 }
 
-function show(type) {
-  count = 0;
-  for (var key in data) {
-    var row = document.getElementById(key);
-    if ((data[key] &  type) !== 0) {
-      row.style.display = '';
-      row.className = (count++ % 2) ? rowColor : altColor;
-    }
-    else
-      row.style.display = 'none';
-  }
-  updateTabs(type);
-}
-
-function updateTabs(type) {
-  var firstRow = document.getElementById(Object.keys(data)[0]);
-  var table = firstRow.closest('table');
-  for (var value in tabs) {
-    var tab = document.getElementById(tabs[value][0]);
-    if (value == type) {
-      tab.className = activeTableTab;
-      tab.innerHTML = tabs[value][1];
-      tab.setAttribute('aria-selected', true);
-      tab.setAttribute('tabindex',0);
-      table.setAttribute('aria-labelledby', tabs[value][0]);
-    }
-    else {
-      tab.className = tableTab;
-      tab.setAttribute('aria-selected', false);
-      tab.setAttribute('tabindex',-1);
-      tab.setAttribute('onclick', "show("+ value + ")");
-      tab.innerHTML = tabs[value][1];
-    }
-  }
-}
-
-function updateModuleFrame(pFrame, cFrame) {
-  top.packageFrame.location = pFrame;
-  top.classFrame.location = cFrame;
-}
-function switchTab(e) {
-  if (e.keyCode == 37 || e.keyCode == 38) {
-    $("[aria-selected=true]").prev().click().focus();
-    e.preventDefault();
-  }
-  if (e.keyCode == 39 || e.keyCode == 40) {
-    $("[aria-selected=true]").next().click().focus();
-    e.preventDefault();
-  }
+if (window.projectDependencyReport) {
+    initializeProjectPage(window.projectDependencyReport);
 }
