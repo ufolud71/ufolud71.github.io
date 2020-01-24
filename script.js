@@ -49,7 +49,7 @@ $(document).ready(function() {
       method: "PUT",
       processData: false,
       contentType: "application/json; charset=utf-8",
-      dataType: 'jsonp',
+      dataType: 'json',
       data: JSON.stringify({
         id: taskId,
         title: taskTitle,
@@ -86,14 +86,14 @@ $(document).ready(function() {
     var taskContent = $(this).find('[name="content"]').val();
 
     var requestUrl = apiRoot + 'createTask';
-chuj chucj
+
 
     $.ajax({
       url: requestUrl,
       method: 'POST',
       processData: false,
       contentType: "application/json; charset=utf-8",
-      dataType: 'jsonp',
+      dataType: 'json',
       data: JSON.stringify({
         title: taskTitle,
         content: taskContent
